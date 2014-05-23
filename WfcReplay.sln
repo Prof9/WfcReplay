@@ -1,0 +1,35 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.30501.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WfcReplay", "WfcReplay\WfcReplay.csproj", "{EAF898AF-9A11-4711-9CA6-472CFF65859D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BLZ", "BLZ", "{D77E390D-4260-44B1-9BE1-7317A58F6B4E}"
+	ProjectSection(SolutionItems) = preProject
+		BLZ\blz.c = BLZ\blz.c
+		BLZ\blz.exe = BLZ\blz.exe
+		BLZ\license.txt = BLZ\license.txt
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D1489082-8DFE-4840-AE45-DC2AF8DFA568}"
+	ProjectSection(SolutionItems) = preProject
+		license.txt = license.txt
+		readme.md = readme.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EAF898AF-9A11-4711-9CA6-472CFF65859D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAF898AF-9A11-4711-9CA6-472CFF65859D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAF898AF-9A11-4711-9CA6-472CFF65859D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAF898AF-9A11-4711-9CA6-472CFF65859D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
