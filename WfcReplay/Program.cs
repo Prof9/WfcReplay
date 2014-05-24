@@ -6,12 +6,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace WfcReplay
 {
 	class Program
 	{
-		static string version = "v0.3";
+		static string version = "v0.4";
 
 		static void Main(string[] args)
 		{
@@ -37,6 +38,7 @@ namespace WfcReplay
 					MemoryStream outStream = new MemoryStream(Encoding.UTF8.GetBytes(code));
 					outStream.Position = 0;
 					string fileName = makeGameString(romReader) + ".txt";
+					fileName = makeFileNameSafe(fileName);
 					writeFile(fileName, outStream);
 					Console.WriteLine("Success!");
 					Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
@@ -108,6 +110,11 @@ namespace WfcReplay
 		void writeTempFile(string fileName, Stream file)
 		{
 			writeFile(tempFolderPath + fileName, file);
+		}
+		static string makeFileNameSafe(string fileName)
+		{
+			string[] validParts = fileName.Split(System.IO.Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries);
+			return string.Join("-", validParts);
 		}
 
 		string tempFolderPath;
@@ -308,6 +315,7 @@ namespace WfcReplay
 			writeTempFile(fileName, file);
 
 			ProcessStartInfo psi = new ProcessStartInfo("blz.exe",  "-d " + tempFolderPath + fileName);
+			psi.WorkingDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			psi.WindowStyle = ProcessWindowStyle.Hidden;
 			Process.Start(psi).WaitForExit();
 			
