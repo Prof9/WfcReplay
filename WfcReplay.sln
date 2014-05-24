@@ -14,6 +14,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BLZ", "BLZ", "{D77E390D-426
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D1489082-8DFE-4840-AE45-DC2AF8DFA568}"
 	ProjectSection(SolutionItems) = preProject
+		changelog.md = changelog.md
 		license.txt = license.txt
 		readme.md = readme.md
 	EndProjectSection

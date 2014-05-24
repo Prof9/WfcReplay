@@ -48,9 +48,11 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PreBuildEvent>copy $(SolutionDir)BLZ\* $(TargetDir)*
+    <PreBuildEvent>if "$(ConfigurationName)" == "Release" del /Q $(TargetDir)*
+copy $(SolutionDir)BLZ\* $(TargetDir)*
 rename $(TargetDir)license.txt blz_license.txt
 copy $(SolutionDir)readme.md $(TargetDir)readme.txt
+copy $(SolutionDir)changelog.md $(TargetDir)changelog.txt
 copy $(SolutionDir)license.txt $(TargetDir)license.txt</PreBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

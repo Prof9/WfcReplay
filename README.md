@@ -1,6 +1,5 @@
 ﻿WfcReplay
 =========
-
 WfcReplay is a command-line Windows utility written in C# that automatically generates an Action Replay DS code for a Nintendo DS game that will make it use HTTP instead of HTTPS for connections to Nintendo Wi-Fi Connection. This is done by pre-finding all URLs in the ROM and patching them in-memory. This can be used to connect to any custom Nintendo Wi-Fi Connection server.
 
 To run this program, the .NET Framework 4.0 or higher must be installed on your computer.
