@@ -27,30 +27,38 @@ namespace WfcReplay
 			{
 #if !DEBUG
 				try
-				{
 #endif
+				{
 					string romPath = args[0];
 
 					Stream rom = readFile(romPath);
 					BinaryReader romReader = new BinaryReader(rom);
 					string code = new Program().process(romReader);
-
-					MemoryStream outStream = new MemoryStream(Encoding.UTF8.GetBytes(code));
-					outStream.Position = 0;
-					string fileName = makeGameString(romReader) + ".txt";
-					fileName = makeFileNameSafe(fileName);
-					writeFile(fileName, outStream);
-					Console.WriteLine("Success!");
-					Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
-#if !DEBUG
+					Console.WriteLine("Finished analyzing ROM.");
+					
+					if (code != null)
+					{
+						MemoryStream outStream = new MemoryStream(Encoding.UTF8.GetBytes(code));
+						outStream.Position = 0;
+						string fileName = makeGameString(romReader) + ".txt";
+						fileName = makeFileNameSafe(fileName);
+						writeFile(fileName, outStream);
+						Console.WriteLine("Success!");
+						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
+					}
+					else
+					{
+						Console.WriteLine("No HTTPS URLs to patch were found.");
+					}
 				}
+#if !DEBUG
 				catch (Exception ex)
 				{
 					Console.WriteLine("FATAL ERROR: " + ex.Message);
 				}
 #endif
 #if DEBUG
-			Console.ReadKey();
+				Console.ReadKey();
 #endif
 			}
 		}
@@ -198,14 +206,21 @@ namespace WfcReplay
 			urlAddresses = urlAddresses.Distinct().ToList();
 			urlAddresses.Sort();
 
-			// Find largest code cave
-			arm9.Position = 0;
-			List<uint> codeCave = findCodeCave(arm9Reader, (uint)arm9RamAddress);
+			if (urlAddresses.Count > 0)
+			{
+				// Find largest code cave
+				arm9.Position = 0;
+				List<uint> codeCave = findCodeCave(arm9Reader, (uint)arm9RamAddress);
 
-			// Form code
-			string code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n";
-			code += makeCode((uint)hookAddress, urlAddresses, codeCave);
-			return code;
+				// Form code
+				string code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n";
+				code += makeCode((uint)hookAddress, urlAddresses, codeCave);
+				return code;
+			}
+			else
+			{
+				return null;
+			}
 		}
 		void log(string s)
 		{
@@ -501,9 +516,11 @@ namespace WfcReplay
 				{
 					code += " 00000000";
 				}
+
+				code = code.Substring(2);
 			}
 
-			return code.Substring(2);
+			return code;
 		}
 	}
 }
