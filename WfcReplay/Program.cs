@@ -164,6 +164,7 @@ namespace WfcReplay
 
 			// Get arm9
 			MemoryStream arm9 = getArm9(romReader);
+			arm9.Position = 0;
 			decryptBlz(ref arm9, arm9Name);
 			BinaryReader arm9Reader = new BinaryReader(arm9);
 
@@ -314,10 +315,15 @@ namespace WfcReplay
 		{
 			writeTempFile(fileName, file);
 
-			ProcessStartInfo psi = new ProcessStartInfo("blz.exe",  "-d " + tempFolderPath + fileName);
+			ProcessStartInfo psi = new ProcessStartInfo("blz.exe",  "-d " + "\"" + tempFolderPath + fileName + "\"");
 			psi.WorkingDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			psi.WindowStyle = ProcessWindowStyle.Hidden;
-			Process.Start(psi).WaitForExit();
+			Process blz = Process.Start(psi);
+			blz.WaitForExit();
+			if (blz.ExitCode != 0)
+			{
+				throw new Exception("BLZ decompression failed.");
+			}
 			
 			file = readTempFile(fileName);
 		}
