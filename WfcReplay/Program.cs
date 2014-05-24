@@ -354,7 +354,6 @@ namespace WfcReplay
 
 			// Start at +0x10
 			arm9Reader.BaseStream.Position += 0x10;
-
 			long start = arm9Reader.BaseStream.Position;
 			long length;
 			while (arm9Reader.BaseStream.Position < 0x800)
@@ -378,6 +377,7 @@ namespace WfcReplay
 						{
 							arm9Reader.BaseStream.Position -= 2;
 						}
+						arm9Reader.BaseStream.Position = (arm9Reader.BaseStream.Position + 3) & ~0x3;
 						start = arm9Reader.BaseStream.Position;
 					}
 					else
