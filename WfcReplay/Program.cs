@@ -12,7 +12,7 @@ namespace WfcReplay
 {
 	class Program
 	{
-		static string version = "v0.4";
+		static string version = "v0.5";
 
 		static void Main(string[] args)
 		{
