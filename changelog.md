@@ -2,6 +2,13 @@ Changelog
 =========
 
 
+WfcReplay v0.4.1 - 25 May 2014
+------------------------------
+Fixes an issue introduced in the previous version when using games with uncompressed ARM9 binaries or overlays.
+
+* Fixed "BLZ decompression failed" error when ARM9 binary or overlay is not compressed.
+
+
 WfcReplay v0.4 - 25 May 2014
 ----------------------------
 This release contains various bugfixes for a number of games, such as Zelda: Phantom Hourglass and Planet Puzzle League. It also corrects some other issues. Antipiracy-protected games remain unsupported.

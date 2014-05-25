@@ -335,10 +335,6 @@ namespace WfcReplay
 			psi.WindowStyle = ProcessWindowStyle.Hidden;
 			Process blz = Process.Start(psi);
 			blz.WaitForExit();
-			if (blz.ExitCode != 0)
-			{
-				throw new Exception("BLZ decompression failed.");
-			}
 			
 			file = readTempFile(fileName);
 		}
