@@ -2,6 +2,14 @@ Changelog
 =========
 
 
+WfcReplay v0.5 - 26 May 2014
+----------------------------
+This version uses a whole new ASM URL patcher that produces much smaller codes. As a result, games that previously did not have suitable code caves are now compatible, such as Pokémon Black 2 & White 2.
+
+* URL patcher now uses compressed string addresses.
+* Various other URL patcher optimizations.
+
+
 WfcReplay v0.4.1 - 25 May 2014
 ------------------------------
 Fixes an issue introduced in the previous version when using games with uncompressed ARM9 binaries or overlays.
