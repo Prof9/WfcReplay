@@ -277,15 +277,16 @@ namespace WfcReplay
 		}
 		static uint findHookRomAddress(BinaryReader arm9Reader, uint ramStart)
 		{
-			while (arm9Reader.BaseStream.Position < arm9Reader.BaseStream.Length)
+			while (arm9Reader.BaseStream.Position <= arm9Reader.BaseStream.Length - 0xC)
 			{
-				uint pos = ramStart + (uint)arm9Reader.BaseStream.Position;
+				long pos = arm9Reader.BaseStream.Position;
 				if (arm9Reader.ReadUInt32() == 0xE3A00000 &&	// mov r0,0h
 					arm9Reader.ReadUInt32() == 0xEE070F90 &&	// mov p15,0,c7,c0,4,r0 ;Wait For Interrupt
 					arm9Reader.ReadUInt32() == 0xE12FFF1E)		// bx r14
 				{
-					return pos;
+					return (uint)(pos + ramStart);
 				}
+				arm9Reader.BaseStream.Position = pos + 4;
 			}
 			throw new Exception("Could not find ARM9 hook!");
 		}
@@ -344,9 +345,9 @@ namespace WfcReplay
 		{
 			List<uint> result = new List<uint>();
 
-			while (reader.BaseStream.Position < reader.BaseStream.Length)
+			while (reader.BaseStream.Position <= reader.BaseStream.Length - 9)
 			{
-				uint pos = ramStart + (uint)reader.BaseStream.Position;
+				long pos = reader.BaseStream.Position;
 				if (reader.ReadByte() == 0x68 &&	// 'h'
 					reader.ReadByte() == 0x74 &&	// 't'
 					reader.ReadByte() == 0x74 &&	// 't'
@@ -357,9 +358,11 @@ namespace WfcReplay
 					reader.ReadByte() == 0x2F &&	// '/'
 					reader.ReadByte() != 0x00)		// '\0'
 				{
-					result.Add(pos);
-					log("\tFound URL at 0x" + pos.ToString("X8"));
+					uint addr = (uint)(pos + ramStart);
+					result.Add(addr);
+					log("\tFound URL at 0x" + addr.ToString("X8"));
 				}
+				reader.BaseStream.Position = pos + 4;
 			}
 
 			return result;
