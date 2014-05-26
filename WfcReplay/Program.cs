@@ -31,6 +31,7 @@ namespace WfcReplay
 				{
 					string romPath = args[0];
 
+					Console.WriteLine("Loading ROM...");
 					Stream rom = readFile(romPath);
 					BinaryReader romReader = new BinaryReader(rom);
 					string code = new Program().process(romReader);
@@ -415,6 +416,7 @@ namespace WfcReplay
 		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<uint> codeCave)
 		{
 			string code = "";
+			urlAddresses.Sort();
 
 			if (urlAddresses.Count > 0)
 			{
@@ -423,72 +425,126 @@ namespace WfcReplay
 				codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
 				codeParts.Add(0xEE070F90);
 
-				List<uint> caveParts = new List<uint>() {
-					//	.thumb
-					//	fspace:
-					//		add		r2,=addr				// get array start
-					//		mov		r3,(addr_end-addr)/4-1	// get array size
-					(uint)(0x2300A20B + ((urlAddresses.Count - 1) << 16)),
-					//		ldr		r4,=70747468h			// "http"
-					//	main_loop:
-					//		ldmia	[r2]!,r1				// get next ptr
-					0xCA024C09,
-					//		ldmia	[r1]!,r0				// get first four bytes, inc
-					//		cmp		r0,r4					// should be "http"
-					0x42A0C901,
-					//		bne		main_loop_next			// if not, go to next
-					//		ldrb	r0,[r1]					// get next char
-					0x7808D107,
-					//		cmp		r0,73h					// should be 's'
-					//		bne		main_loop_next			// if not, go to next
-					0xD1042873,
-					//	patch_loop:
-					//		ldrb	r0,[r1,1h]				// get next char
-					//		strb	r0,[r1]					// write to current
-					0x70087848,
-					//		add		r1,1h					// increment address
-					//		tst		r0,r0					// check for zero byte
-					0x42003101,
-					//		bne		patch_loop				// if not zero, loop
-					//	main_loop_next:
-					//		sub		r3,1h					// check if array end reached
-					0x3B01D1FA,
-					//		bpl		main_loop				// if not, loop
-					//	end:
-					//										// r0 is still zero at this point
-					//		bx		r15						// switch to ARM
-					0x4778D5F1,
-					//	.arm
-					//		mov		p15,0,c7,c0,4,r0		// wait for interrupt
-					0xEE070F90,
-					//		pop		r1-r4,r15				// pop registers and return
-					0xE8BD801E,
-					//	"http"
-					0x70747468
-				};
-				caveParts.AddRange(urlAddresses);
+				List<ushort> caveParts = new List<ushort>();
+				//	.thumb
+				//	fspace:
+				//		add		r2,=addr			// get array start
+				caveParts.Add(0xA20D);
+				//		ldmia	[r2]!,r1			// get first string ptr, increment array ptr
+				caveParts.Add(0xCA02);
+				//	main_loop:
+				//		ldr		r3,=2F2F3A73h		// "s://" and negative offset
+				caveParts.Add(0x4B0B);
+				//		ldr		r4,[r1,r3]			// get second four bytes
+				caveParts.Add(0x58CC);
+				//		cmp		r4,r3				// should be "s://"
+				caveParts.Add(0x429C);
+				//		bne		next				// if not "s://", calc next string ptr
+				caveParts.Add(0xD105);
+				//		add		r3,r3,r1			// calc actual string ptr
+				caveParts.Add(0x185B);
+				//	patch_loop:
+				//		ldrb	r4,[r3,1h]			// get next char
+				caveParts.Add(0x785C);
+				//		strb	r4,[r3]				// write to current
+				caveParts.Add(0x701C);
+				//		add		r3,1h				// increment string ptr
+				caveParts.Add(0x3301);
+				//		tst		r4,r4				// check for zero byte
+				caveParts.Add(0x4224);
+				//		bne		patch_loop			// if not zero, loop
+				caveParts.Add(0xD1FA);
+				//	next:							// r0 is zero at this point
+				//		ldsh	r4,[r2,r0]			// get next value (signed)
+				//									// if positive, offset of next ptr
+				//									// if negative, upper bits of next ptr
+				//									// if zero, terminator
+				caveParts.Add(0x5E14);
+				//		lsl		r4,r4,2h			// expand and update flags
+				caveParts.Add(0x00A4);
+				//		beq		end					// if offset is zero, stop
+				caveParts.Add(0xD005);
+				//	next_add:
+				//		add		r2,2h				// increment array ptr
+				caveParts.Add(0x3202);
+				//		add		r1,r1,r4			// add offset to string ptr
+				caveParts.Add(0x1909);
+				//		bcc		main_loop			// if offset was positive, check next
+				caveParts.Add(0xD3EF);
+				//		lsl		r1,r4,0Eh			// shift to upper and treat as ptr
+				caveParts.Add(0x03A1);
+				//		ldrh	r4,[r2]				// treat lower as offset
+				caveParts.Add(0x8814);
+				//		b		next_add			// add offset to pointer
+				caveParts.Add(0xE7F9);
+				//	end:
+				//		bx		r15					// switch to ARM
+				caveParts.Add(0x4778);
+				//	.arm							// r0 is still zero
+				//		mov		p15,0,c7,c0,4,r0	// wait for interrupt
+				caveParts.Add(0x0F90);
+				caveParts.Add(0xEE07);
+				//		pop		r1-r4,r15			// pop registers and return
+				caveParts.Add(0x801E);
+				caveParts.Add(0xE8BD);
+				//	.pool
+				caveParts.Add(0x3A73);
+				caveParts.Add(0x2F2F);
 
-				if (codeCave[1] < caveParts.Count * 4)
+				List<ushort> dataParts = new List<ushort>();
+				for (int i = 0; i < urlAddresses.Count; i++)
+				{
+					uint ptr = urlAddresses[i] - 0x2F2F3A73 + 4;
+					ushort upper = (ushort)(ptr >> 16);
+					ushort lower = (ushort)(ptr & 0xFFFF);
+					if (i == 0)
+					{
+						dataParts.Add(lower);
+						dataParts.Add(upper);
+					}
+					else if (urlAddresses[i] - urlAddresses[i - 1] < 0x20000)
+					{
+						dataParts.Add((ushort)((urlAddresses[i] - urlAddresses[i - 1]) >> 2));
+					}
+					else
+					{
+						dataParts.Add(upper);
+						dataParts.Add(lower);
+					}
+				}
+				dataParts.Add(0x0000);
+				caveParts.AddRange(dataParts);
+
+				if (codeCave[1] < caveParts.Count * 2)
 				{
 					throw new IOException("Could not find a suitable code cave.");
 				}
 
 				codeParts.Add(0xE0000000 | (codeCave[0] & 0xFFFFFFF));
-				codeParts.Add((uint)(caveParts.Count * 4));
-				codeParts.AddRange(caveParts);
+				codeParts.Add((uint)(caveParts.Count * 2));
+
+				if (caveParts.Count % 2 != 0)
+				{
+					caveParts.Add(0x0000);
+				}
+				for (int i = 0; i < caveParts.Count; i += 2)
+				{
+					codeParts.Add((uint)(caveParts[i] + (caveParts[i + 1] << 16)));
+				}
+
 				if (codeParts.Count % 2 == 1)
 				{
 					codeParts.Add(0x00000000);
 				}
 
-				codeParts.Add(arm9Hook & 0xFFFFFFF);
+				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
 				//		push	r1-r4,r14					// push registers
 				codeParts.Add(0xE92D401E);
-				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
+				codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
 				//		blx		fspace						// branch to code cave
 				uint opcode = 0xFA000000;
 				opcode |= (uint)((codeCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
-				opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 3) & 0xFFFFFF);
+				opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 4) & 0xFFFFFF);
 				codeParts.Add(opcode);
 
 				codeParts.Add(0xD2000000);
@@ -512,7 +568,6 @@ namespace WfcReplay
 				{
 					code += " 00000000";
 				}
-
 				code = code.Substring(2);
 			}
 
