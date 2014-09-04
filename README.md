@@ -36,6 +36,6 @@ Credits
 
 License
 =======
-This project is licensed under the terms of the MIT license. See *license.txt* for more information.
+This project is licensed under the terms of the MIT license. See *license.txt* in the main folder for more information.
 
-WfcReplay includes BLZ v1.4 by CUE, which is covered by the GPLv3 license. As such, the source code for this program is included and can be found in *blz.c*. The full terms of the license can be found in *blz_license.txt*.
+WfcReplay includes BLZ v1.4 by CUE, which is covered by the GPLv3 license. As such, the source code for this program is included and can be found in *blz.c*. The full terms of the license can be found in *license.txt* in the *BLZ* folder.
