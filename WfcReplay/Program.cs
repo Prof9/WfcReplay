@@ -29,12 +29,41 @@ namespace WfcReplay
 				try
 #endif
 				{
-					string romPath = args[0];
+					bool checkMode = false;
+					bool local = false;
+					bool manualMode = false;
+
+					int argStart = 0;
+					bool flagsLeft = true;
+					while (flagsLeft)
+					{
+						switch (args[argStart++])
+						{
+							case "--check":
+							case "-c":
+								checkMode = true;
+								break;
+							case "--local":
+							case "-l":
+								local = true;
+								break;
+							case "--manual":
+							case "-m":
+								manualMode = true;
+								break;
+							default:
+								argStart--;
+								flagsLeft = false;
+								break;
+						}
+					}
+
+					string romPath = args[argStart];
 
 					Console.WriteLine("Loading ROM...");
 					Stream rom = readFile(romPath);
 					BinaryReader romReader = new BinaryReader(rom);
-					string code = new Program().process(romReader);
+					string code = new Program(checkMode, local, manualMode).process(romReader);
 					Console.WriteLine("Finished analyzing ROM.");
 					
 					if (code != null)
@@ -47,7 +76,7 @@ namespace WfcReplay
 						Console.WriteLine("Success!");
 						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
 					}
-					else
+					else if (!checkMode)
 					{
 						Console.WriteLine("No HTTPS URLs to patch were found.");
 					}
@@ -127,24 +156,36 @@ namespace WfcReplay
 		}
 
 		string tempFolderPath;
+		bool checkMode;
+		bool manualMode;
 
-		Program()
+		Program(bool checkMode, bool local, bool manualMode)
 		{
+			this.checkMode = checkMode;
+			this.manualMode = manualMode;
+
 			try
 			{
 #if DEBUG
-				tempFolderPath = @"temp\";
-				if (Directory.Exists(tempFolderPath))
-				{
-					try
-					{
-						Directory.Delete(tempFolderPath, true);
-					}
-					catch { }
-				}
+				if (true)
 #else
-				tempFolderPath = Path.GetTempPath() + @"WfcReplay\";
+				if (local)
 #endif
+				{
+					tempFolderPath = @"temp\";
+					if (Directory.Exists(tempFolderPath))
+					{
+						try
+						{
+							Directory.Delete(tempFolderPath, true);
+						}
+						catch { }
+					}
+				}
+				else
+				{
+					tempFolderPath = Path.GetTempPath() + @"WfcReplay\";
+				}
 				tempFolderPath = Directory.CreateDirectory(tempFolderPath).FullName;
 			}
 			catch
@@ -186,6 +227,10 @@ namespace WfcReplay
 			// Search arm9 for URLs
 			log("Searching " + arm9Name + "...");
 			List<uint> urlAddresses = searchFileForUrls(arm9Reader, arm9RamAddress);
+			if (this.checkMode && urlAddresses.Count > 0)
+			{
+				return true.ToString();
+			}
 
 			// Search ARM9 overlays for URLs
 			int ovlCount = getOverlay9Count(romReader);
@@ -202,6 +247,10 @@ namespace WfcReplay
 
 				ovl.Position = 0;
 				urlAddresses.AddRange(searchFileForUrls(ovlReader, ramStart));
+				if (this.checkMode && urlAddresses.Count > 0)
+				{
+					return true.ToString();
+				}
 			}
 
 			urlAddresses = urlAddresses.Distinct().ToList();
@@ -215,7 +264,7 @@ namespace WfcReplay
 
 				// Form code
 				string code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n";
-				code += makeCode((uint)hookAddress, urlAddresses, codeCave);
+				code += makeCode((uint)hookAddress, urlAddresses, codeCave, this.manualMode);
 				return code;
 			}
 			else
@@ -416,7 +465,7 @@ namespace WfcReplay
 			return cave;
 		}
 
-		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<uint> codeCave)
+		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<uint> codeCave, bool manualMode)
 		{
 			string code = "";
 			urlAddresses.Sort();
@@ -425,12 +474,18 @@ namespace WfcReplay
 			{
 				List<uint> codeParts = new List<uint>();
 				// Hook check
-				codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
-				codeParts.Add(0xEE070F90);
+				if (!manualMode) {
+					codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
+					codeParts.Add(0xEE070F90);
+				}
 
 				List<ushort> caveParts = new List<ushort>();
 				//	.thumb
 				//	fspace:
+				if (manualMode) {
+					//	mov		r0,0h
+					caveParts.Add(0x2000);
+				}
 				//		add		r2,=addr			// get array start
 				caveParts.Add(0xA20D);
 				//		ldmia	[r2]!,r1			// get first string ptr, increment array ptr
@@ -481,15 +536,26 @@ namespace WfcReplay
 				//		b		next_add			// add offset to pointer
 				caveParts.Add(0xE7F9);
 				//	end:
-				//		bx		r15					// switch to ARM
-				caveParts.Add(0x4778);
-				//	.arm							// r0 is still zero
-				//		mov		p15,0,c7,c0,4,r0	// wait for interrupt
-				caveParts.Add(0x0F90);
-				caveParts.Add(0xEE07);
-				//		pop		r1-r4,r15			// pop registers and return
-				caveParts.Add(0x801E);
-				caveParts.Add(0xE8BD);
+				if (!manualMode) {
+					//	bx		r15					// switch to ARM
+					caveParts.Add(0x4778);
+					//	.arm							// r0 is still zero
+					//	mov		p15,0,c7,c0,4,r0	// wait for interrupt
+					caveParts.Add(0x0F90);
+					caveParts.Add(0xEE07);
+					//	pop		r1-r4,r15			// pop registers and return
+					caveParts.Add(0x801E);
+					caveParts.Add(0xE8BD);
+				} else {
+					//	ldr		r0,[return_addr]
+					caveParts.Add(0x4800);
+					//	bx		r0
+					caveParts.Add(0x4700);
+					//	return_addr:
+					//	dd		0xAAAAAAAA
+					caveParts.Add(0xAAAA);
+					caveParts.Add(0xAAAA);
+				}
 				//	.pool
 				caveParts.Add(0x3A73);
 				caveParts.Add(0x2F2F);
@@ -540,18 +606,20 @@ namespace WfcReplay
 					codeParts.Add(0x00000000);
 				}
 
-				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
-				//		push	r1-r4,r14					// push registers
-				codeParts.Add(0xE92D401E);
-				codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
-				//		blx		fspace						// branch to code cave
-				uint opcode = 0xFA000000;
-				opcode |= (uint)((codeCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
-				opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 4) & 0xFFFFFF);
-				codeParts.Add(opcode);
+				if (!manualMode) {
+					codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
+					//		push	r1-r4,r14					// push registers
+					codeParts.Add(0xE92D401E);
+					codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
+					//		blx		fspace						// branch to code cave
+					uint opcode = 0xFA000000;
+					opcode |= (uint)((codeCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
+					opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 4) & 0xFFFFFF);
+					codeParts.Add(opcode);
 
-				codeParts.Add(0xD2000000);
-				codeParts.Add(0x00000000);
+					codeParts.Add(0xD2000000);
+					codeParts.Add(0x00000000);
+				}
 
 				bool first = true;
 				foreach (uint part in codeParts)
