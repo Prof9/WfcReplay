@@ -21,6 +21,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __linux
+#define strcmpi strcasecmp
+
+#include <sys/stat.h>
+
+long filelength(int fd)
+{
+    struct stat st;
+    fstat(fd, &st);
+    return st.st_size;
+}
+#endif
+
 /*----------------------------------------------------------------------------*/
 #define CMD_DECODE    0x00       // decode
 #define CMD_ENCODE    0x01       // encode
