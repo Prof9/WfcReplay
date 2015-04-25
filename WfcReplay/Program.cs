@@ -74,7 +74,7 @@ namespace WfcReplay
 						fileName = makeFileNameSafe(fileName);
 						writeFile(fileName, outStream);
 						Console.WriteLine("Success!");
-						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
+						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + System.IO.Path.DirectorySeparatorChar + fileName + ".");
 					}
 					else if (!checkMode)
 					{
@@ -172,7 +172,7 @@ namespace WfcReplay
 				if (local)
 #endif
 				{
-					tempFolderPath = @"temp\";
+					tempFolderPath = @"temp"+System.IO.Path.DirectorySeparatorChar;
 					if (Directory.Exists(tempFolderPath))
 					{
 						try
@@ -184,7 +184,7 @@ namespace WfcReplay
 				}
 				else
 				{
-					tempFolderPath = Path.GetTempPath() + @"WfcReplay\";
+					tempFolderPath = Path.GetTempPath() + @"WfcReplay"+System.IO.Path.DirectorySeparatorChar;
 				}
 				tempFolderPath = Directory.CreateDirectory(tempFolderPath).FullName;
 			}
