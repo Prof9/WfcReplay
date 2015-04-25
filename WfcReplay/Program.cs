@@ -131,7 +131,7 @@ namespace WfcReplay
 			}
 			catch
 			{
-				throw new IOException("Could not write file to disk.");
+				throw new IOException("Could not write file to disk ("+fileName+").");
 			}
 			finally
 			{
@@ -380,8 +380,8 @@ namespace WfcReplay
 		void decryptBlz(ref MemoryStream file, string fileName)
 		{
 			writeTempFile(fileName, file);
-
-			ProcessStartInfo psi = new ProcessStartInfo("blz.exe",  "-d " + "\"" + tempFolderPath + fileName + "\"");
+			string blzexe = (System.IO.Path.DirectorySeparatorChar == '/') ? "blz" : "blz.exe";
+			ProcessStartInfo psi = new ProcessStartInfo(blzexe,  "-d " + "\"" + tempFolderPath + fileName + "\"");
 			psi.WorkingDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			psi.WindowStyle = ProcessWindowStyle.Hidden;
 			Process blz = Process.Start(psi);
