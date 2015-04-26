@@ -48,6 +48,22 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
+    <PreBuildEvent Condition=" '$(ConfigurationName)' == 'Release' AND '$(OS)' != 'Unix' ">
+del /Q $(TargetDir)*
+copy $(SolutionDir)BLZ\* $(TargetDir)*
+rename $(TargetDir)license.txt blz_license.txt
+copy $(SolutionDir)readme.md $(TargetDir)readme.txt
+copy $(SolutionDir)changelog.md $(TargetDir)changelog.txt
+copy $(SolutionDir)license.txt $(TargetDir)license.txt
+    </PreBuildEvent>
+    <PreBuildEvent Condition=" '$(ConfigurationName)' == 'Release' AND '$(OS)' == 'Unix' ">
+rm -rf  $(TargetDir)*
+cp $(SolutionDir)BLZ\* $(TargetDir)*
+cp $(TargetDir)license.txt blz_license.txt
+cp $(SolutionDir)readme.md $(TargetDir)readme.txt
+cp $(SolutionDir)changelog.md $(TargetDir)changelog.txt
+cp $(SolutionDir)license.txt $(TargetDir)license.txt
+    </PreBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
