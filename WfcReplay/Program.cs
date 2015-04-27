@@ -74,7 +74,7 @@ namespace WfcReplay
 						fileName = makeFileNameSafe(fileName);
 						writeFile(fileName, outStream);
 						Console.WriteLine("Success!");
-						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + "\\" + fileName + ".");
+						Console.WriteLine("Code written to " + Directory.GetCurrentDirectory() + System.IO.Path.DirectorySeparatorChar + fileName + ".");
 					}
 					else if (!checkMode)
 					{
@@ -131,7 +131,7 @@ namespace WfcReplay
 			}
 			catch
 			{
-				throw new IOException("Could not write file to disk.");
+				throw new IOException("Could not write file to disk ("+fileName+").");
 			}
 			finally
 			{
@@ -172,7 +172,7 @@ namespace WfcReplay
 				if (local)
 #endif
 				{
-					tempFolderPath = @"temp\";
+					tempFolderPath = @"temp"+System.IO.Path.DirectorySeparatorChar;
 					if (Directory.Exists(tempFolderPath))
 					{
 						try
@@ -184,7 +184,7 @@ namespace WfcReplay
 				}
 				else
 				{
-					tempFolderPath = Path.GetTempPath() + @"WfcReplay\";
+					tempFolderPath = Path.GetTempPath() + @"WfcReplay"+System.IO.Path.DirectorySeparatorChar;
 				}
 				tempFolderPath = Directory.CreateDirectory(tempFolderPath).FullName;
 			}
@@ -380,8 +380,8 @@ namespace WfcReplay
 		void decryptBlz(ref MemoryStream file, string fileName)
 		{
 			writeTempFile(fileName, file);
-
-			ProcessStartInfo psi = new ProcessStartInfo("blz.exe",  "-d " + "\"" + tempFolderPath + fileName + "\"");
+			string blzexe = (System.IO.Path.DirectorySeparatorChar == '/') ? "blz" : "blz.exe";
+			ProcessStartInfo psi = new ProcessStartInfo(blzexe,  "-d " + "\"" + tempFolderPath + fileName + "\"");
 			psi.WorkingDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			psi.WindowStyle = ProcessWindowStyle.Hidden;
 			Process blz = Process.Start(psi);
