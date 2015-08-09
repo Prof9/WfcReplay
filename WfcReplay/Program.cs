@@ -31,7 +31,6 @@ namespace WfcReplay
 				{
 					bool checkMode = false;
 					bool local = false;
-					bool manualMode = false;
 
 					int argStart = 0;
 					bool flagsLeft = true;
@@ -47,10 +46,6 @@ namespace WfcReplay
 							case "-l":
 								local = true;
 								break;
-							case "--manual":
-							case "-m":
-								manualMode = true;
-								break;
 							default:
 								argStart--;
 								flagsLeft = false;
@@ -63,7 +58,7 @@ namespace WfcReplay
 					Console.WriteLine("Loading ROM...");
 					Stream rom = readFile(romPath);
 					BinaryReader romReader = new BinaryReader(rom);
-					string code = new Program(checkMode, local, manualMode).process(romReader);
+					string code = new Program(checkMode, local).process(romReader);
 					Console.WriteLine("Finished analyzing ROM.");
 					
 					if (code != null)
@@ -157,12 +152,10 @@ namespace WfcReplay
 
 		string tempFolderPath;
 		bool checkMode;
-		bool manualMode;
 
-		Program(bool checkMode, bool local, bool manualMode)
+		Program(bool checkMode, bool local)
 		{
 			this.checkMode = checkMode;
-			this.manualMode = manualMode;
 
 			try
 			{
@@ -258,13 +251,15 @@ namespace WfcReplay
 
 			if (urlAddresses.Count > 0)
 			{
-				// Find largest code cave
+				// Find code caves
 				arm9.Position = 0;
-				List<uint> codeCave = findCodeCave(arm9Reader, (uint)arm9RamAddress);
+				List<List<uint>> codeCaves = findCodeCaves(arm9Reader, (uint)arm9RamAddress);
+				// Sort by cave length
+				codeCaves.Sort((a, b) => -a[1].CompareTo(b[1]));
 
 				// Form code
 				string code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n";
-				code += makeCode((uint)hookAddress, urlAddresses, codeCave, this.manualMode);
+				code += makeCode((uint)hookAddress, urlAddresses, codeCaves);
 				return code;
 			}
 			else
@@ -417,10 +412,11 @@ namespace WfcReplay
 			return result;
 		}
 
-		static List<uint> findCodeCave(BinaryReader arm9Reader, uint arm9RamAddress)
+		static List<List<uint>> findCodeCaves(BinaryReader arm9Reader, uint arm9RamAddress)
 		{
-			List<uint> cave = new List<uint>() { 0x2000000, 0x0 };
-			//List<uint> cave = new List<uint>() { 0x23FEE00, 0x200 };
+			List<List<uint>> caves = new List<List<uint>>();
+			caves.Add(new List<uint>() { 0x2000000, 0x0 });
+			//caves.Add(new List<uint>() { 0x23FEE00, 0x200 });
 
 			// Start at +0x10
 			arm9Reader.BaseStream.Position += 0x10;
@@ -439,10 +435,7 @@ namespace WfcReplay
 					if (next2 == 0x4770 || next3 == 0x4770)
 					{
 						length = arm9Reader.BaseStream.Position - start - 6;
-						if (length > cave[1])
-						{
-							cave = new List<uint>() { (uint)start + arm9RamAddress, (uint)length };
-						}
+						caves.Add(new List<uint>() { (uint)start + arm9RamAddress, (uint)length });
 						if (next2 == 0x4770)
 						{
 							arm9Reader.BaseStream.Position -= 2;
@@ -457,15 +450,12 @@ namespace WfcReplay
 				}
 			}
 			length = arm9Reader.BaseStream.Position - start;
-			if (length > cave[1])
-			{
-				cave = new List<uint>() { (uint)start + arm9RamAddress, (uint)length };
-			}
+			caves.Add(new List<uint>() { (uint)start + arm9RamAddress, (uint)length });
 
-			return cave;
+			return caves;
 		}
 
-		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<uint> codeCave, bool manualMode)
+		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<List<uint>> codeCaves)
 		{
 			string code = "";
 			urlAddresses.Sort();
@@ -474,19 +464,33 @@ namespace WfcReplay
 			{
 				List<uint> codeParts = new List<uint>();
 				// Hook check
-				if (!manualMode) {
-					codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
-					codeParts.Add(0xEE070F90);
-				}
+				codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
+				codeParts.Add(0xEE070F90);
 
+				// Compress offsets
+				List<ushort> dataParts = new List<ushort>();
+				for (int i = 0; i < urlAddresses.Count; i++) {
+					uint ptr = urlAddresses[i] - 0x2F2F3A73 + 4;
+					ushort upper = (ushort)(ptr >> 16);
+					ushort lower = (ushort)(ptr & 0xFFFF);
+					if (i == 0) {
+						dataParts.Add(lower);
+						dataParts.Add(upper);
+					} else if (urlAddresses[i] - urlAddresses[i - 1] < 0x20000) {
+						dataParts.Add((ushort)((urlAddresses[i] - urlAddresses[i - 1]) >> 2));
+					} else {
+						dataParts.Add(upper);
+						dataParts.Add(lower);
+					}
+				}
+				dataParts.Add(0x0000);
+
+				// Compile ASM code
 				List<ushort> caveParts = new List<ushort>();
 				//	.thumb
 				//	fspace:
-				if (manualMode) {
-					//	mov		r0,0h
-					caveParts.Add(0x2000);
-				}
 				//		add		r2,=addr			// get array start
+				int dataLdrOffset = caveParts.Count;
 				caveParts.Add(0xA20D);
 				//		ldmia	[r2]!,r1			// get first string ptr, increment array ptr
 				caveParts.Add(0xCA02);
@@ -536,90 +540,70 @@ namespace WfcReplay
 				//		b		next_add			// add offset to pointer
 				caveParts.Add(0xE7F9);
 				//	end:
-				if (!manualMode) {
-					//	bx		r15					// switch to ARM
-					caveParts.Add(0x4778);
-					//	.arm							// r0 is still zero
-					//	mov		p15,0,c7,c0,4,r0	// wait for interrupt
-					caveParts.Add(0x0F90);
-					caveParts.Add(0xEE07);
-					//	pop		r1-r4,r15			// pop registers and return
-					caveParts.Add(0x801E);
-					caveParts.Add(0xE8BD);
-				} else {
-					//	ldr		r0,[return_addr]
-					caveParts.Add(0x4800);
-					//	bx		r0
-					caveParts.Add(0x4700);
-					//	return_addr:
-					//	dd		0xAAAAAAAA
-					caveParts.Add(0xAAAA);
-					caveParts.Add(0xAAAA);
-				}
+				//	bx		r15					// switch to ARM
+				caveParts.Add(0x4778);
+				//	.arm							// r0 is still zero
+				//	mov		p15,0,c7,c0,4,r0	// wait for interrupt
+				caveParts.Add(0x0F90);
+				caveParts.Add(0xEE07);
+				//	pop		r1-r4,r15			// pop registers and return
+				caveParts.Add(0x801E);
+				caveParts.Add(0xE8BD);
 				//	.pool
 				caveParts.Add(0x3A73);
 				caveParts.Add(0x2F2F);
 
-				List<ushort> dataParts = new List<ushort>();
-				for (int i = 0; i < urlAddresses.Count; i++)
-				{
-					uint ptr = urlAddresses[i] - 0x2F2F3A73 + 4;
-					ushort upper = (ushort)(ptr >> 16);
-					ushort lower = (ushort)(ptr & 0xFFFF);
-					if (i == 0)
+				// Do we need to split over 2 code caves?
+				List<uint> asmCave = codeCaves[0];
+				if (codeCaves[0][1] < caveParts.Count * 2 + dataParts.Count * 2) {
+					// Do we have enough code caves?
+					if (codeCaves.Count < 2)
 					{
-						dataParts.Add(lower);
-						dataParts.Add(upper);
+						throw new IOException("Could not find suitable code caves.");
 					}
-					else if (urlAddresses[i] - urlAddresses[i - 1] < 0x20000)
+
+					// Pick suitable caves
+					List<uint> dataCave = codeCaves[1];
+					if (dataParts.Count > caveParts.Count + 2)
 					{
-						dataParts.Add((ushort)((urlAddresses[i] - urlAddresses[i - 1]) >> 2));
+						asmCave = codeCaves[1];
+						dataCave = codeCaves[0];
 					}
-					else
+
+					// Replace add r2,=addr with ldr r2,[addrPtr]
+					caveParts[dataLdrOffset] = 0x4A0D;
+					// Set data cave offset in ASM cave
+					caveParts.Add((ushort)(dataCave[0] & 0xFFFF));
+					caveParts.Add((ushort)(dataCave[0] >> 16));
+
+					// Will this fit?
+					if (asmCave[1] < caveParts.Count * 2 || dataCave[1] < dataParts.Count * 2)
 					{
-						dataParts.Add(upper);
-						dataParts.Add(lower);
+						throw new IOException("Could not find suitable code caves.");
 					}
-				}
-				dataParts.Add(0x0000);
-				caveParts.AddRange(dataParts);
 
-				if (codeCave[1] < caveParts.Count * 2)
+					// Insert caves
+					insertCodeCave(codeParts, caveParts, asmCave);
+					insertCodeCave(codeParts, dataParts, dataCave);
+				}
+				else
 				{
-					throw new IOException("Could not find a suitable code cave.");
+					caveParts.AddRange(dataParts);
+					insertCodeCave(codeParts, caveParts, asmCave);
 				}
 
-				codeParts.Add(0xE0000000 | (codeCave[0] & 0xFFFFFFF));
-				codeParts.Add((uint)(caveParts.Count * 2));
+				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
+				//		push	r1-r4,r14					// push registers
+				codeParts.Add(0xE92D401E);
+				codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
+				//		blx		fspace						// branch to code cave
+				uint opcode = 0xFA000000;
+				opcode |= (uint)((asmCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
+				opcode |= (uint)(-(((arm9Hook - asmCave[0]) / 4) + 4) & 0xFFFFFF);
+				codeParts.Add(opcode);
 
-				if (caveParts.Count % 2 != 0)
-				{
-					caveParts.Add(0x0000);
-				}
-				for (int i = 0; i < caveParts.Count; i += 2)
-				{
-					codeParts.Add((uint)(caveParts[i] + (caveParts[i + 1] << 16)));
-				}
-
-				if (codeParts.Count % 2 == 1)
-				{
-					codeParts.Add(0x00000000);
-				}
-
-				if (!manualMode) {
-					codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
-					//		push	r1-r4,r14					// push registers
-					codeParts.Add(0xE92D401E);
-					codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
-					//		blx		fspace						// branch to code cave
-					uint opcode = 0xFA000000;
-					opcode |= (uint)((codeCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
-					opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 4) & 0xFFFFFF);
-					codeParts.Add(opcode);
-
-					codeParts.Add(0xD2000000);
-					codeParts.Add(0x00000000);
-				}
+				codeParts.Add(0xD2000000);
+				codeParts.Add(0x00000000);
 
 				bool first = true;
 				foreach (uint part in codeParts)
@@ -643,6 +627,22 @@ namespace WfcReplay
 			}
 
 			return code;
+		}
+
+		private static void insertCodeCave(List<uint> codeParts, List<ushort> caveParts, List<uint> cave)
+		{
+			codeParts.Add(0xE0000000 | (cave[0] & 0xFFFFFFF));
+			codeParts.Add((uint)(caveParts.Count * 2));
+			if (caveParts.Count % 2 != 0)
+			{
+				caveParts.Add(0x0000);
+			}
+			for (int i = 0; i < caveParts.Count; i += 2) {
+				codeParts.Add((uint)(caveParts[i] + (caveParts[i + 1] << 16)));
+			}
+			if (codeParts.Count % 2 == 1) {
+				codeParts.Add(0x00000000);
+			}
 		}
 	}
 }
