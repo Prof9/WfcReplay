@@ -2,6 +2,16 @@ Changelog
 =========
 
 
+WfcReplay v0.6 - 14 August 2015
+-------------------------------
+Support for a more flexible patching system was added in this version, which increases compatibility with certain problem games that have an extreme number of URLs, such as the Japanese version of Pokémon Black 2. In fact, I'd be surprised if any other game required it...
+
+Additionally, thanks to bjoern-r, WfcReplay should now be compatible with the Mono runtime on Linux (and maybe other operating systems?). I haven't personally tested this, though. You will probably need to compile BLZ yourself in order for it to work.
+
+* Now properly generates codes for specific problem games.
+* Mono compatibility.
+
+
 WfcReplay v0.5 - 26 May 2014
 ----------------------------
 This version uses a whole new ASM URL patcher that produces much smaller codes. As a result, games that previously did not have suitable code caves are now compatible, such as Pokémon Black 2 & White 2.
