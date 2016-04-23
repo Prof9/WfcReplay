@@ -2,6 +2,15 @@ Changelog
 =========
 
 
+WfcReplay v0.7 - 23 April 2016
+------------------------------
+Added support for games that store their URLs at memory addresses that are not 32-bit aligned. In all my testing I hadn't encountered any games that do this, but apparently they exist. Go figure.
+
+Unfortunately, the custom compression scheme used in WfcReplay v0.5 onwards only works when the URL addresses are 32-bit aligned. So WfcReplay now internally generates two codes; one using the compression from v0.5 onwards (if possible!) and one without any compression, and will output the shorter one of the two.
+
+* Improved support with particular NDS games.
+
+
 WfcReplay v0.6 - 14 August 2015
 -------------------------------
 Support for a more flexible patching system was added in this version, which increases compatibility with certain problem games that have an extreme number of URLs, such as the Japanese version of Pokémon Black 2. In fact, I'd be surprised if any other game required it...

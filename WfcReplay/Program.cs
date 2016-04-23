@@ -12,7 +12,7 @@ namespace WfcReplay
 {
 	class Program
 	{
-		static string version = "v0.6";
+		static string version = "v0.7";
 
 		static void Main(string[] args)
 		{
@@ -31,6 +31,7 @@ namespace WfcReplay
 				{
 					bool checkMode = false;
 					bool local = false;
+					bool fast = false;
 
 					int argStart = 0;
 					bool flagsLeft = true;
@@ -46,6 +47,10 @@ namespace WfcReplay
 							case "-l":
 								local = true;
 								break;
+							case "--fast":
+							case "-f":
+								fast = true;
+								break;
 							default:
 								argStart--;
 								flagsLeft = false;
@@ -55,10 +60,13 @@ namespace WfcReplay
 
 					string romPath = args[argStart];
 
+					if (fast) {
+						Console.WriteLine("WARNING: Fast search enabled, this may not find all URLs!!");
+					}
 					Console.WriteLine("Loading ROM...");
 					Stream rom = readFile(romPath);
 					BinaryReader romReader = new BinaryReader(rom);
-					string code = new Program(checkMode, local).process(romReader);
+					string code = new Program(checkMode, local, fast).process(romReader);
 					Console.WriteLine("Finished analyzing ROM.");
 					
 					if (code != null)
@@ -152,10 +160,12 @@ namespace WfcReplay
 
 		string tempFolderPath;
 		bool checkMode;
+		bool fast;
 
-		Program(bool checkMode, bool local)
+		Program(bool checkMode, bool local, bool fast)
 		{
 			this.checkMode = checkMode;
+			this.fast = fast;
 
 			try
 			{
@@ -257,9 +267,33 @@ namespace WfcReplay
 				// Sort by cave length
 				codeCaves.Sort((a, b) => -a[1].CompareTo(b[1]));
 
-				// Form code
-				string code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n";
-				code += makeCode((uint)hookAddress, urlAddresses, codeCaves);
+				// Create long and short code
+				string code = "";
+
+				// Make an uncompressed code
+				if (urlAddresses.Count <= 251) {
+					code = makeCodeLong((uint)hookAddress, urlAddresses, codeCaves);
+				}
+
+				// Check if we can make a compressed code
+				bool hasMisalignedAddresses = false;
+				foreach (uint urlAddress in urlAddresses) {
+					if ((urlAddress & 0x3) != 0) {
+						hasMisalignedAddresses = true;
+						break;
+					}
+				}
+				// Make a compressed code
+				if (!hasMisalignedAddresses) {
+					string smallCode = makeCodeSmall((uint)hookAddress, urlAddresses, codeCaves);
+					if (smallCode.Length <= code.Length) {
+						code = smallCode;
+					}
+				}
+
+				// Add code name
+				code = "::Bypass HTTPS " + version + " for " + gameString + "\r\n" + code;
+
 				return code;
 			}
 			else
@@ -406,7 +440,7 @@ namespace WfcReplay
 					result.Add(addr);
 					log("\tFound URL at 0x" + addr.ToString("X8"));
 				}
-				reader.BaseStream.Position = pos + 4;
+				reader.BaseStream.Position = pos + (this.fast ? 4 : 1);
 			}
 
 			return result;
@@ -455,7 +489,120 @@ namespace WfcReplay
 			return caves;
 		}
 
-		static string makeCode(uint arm9Hook, List<uint> urlAddresses, List<List<uint>> codeCaves)
+		static string makeCodeLong(uint arm9Hook, List<uint> urlAddresses, List<List<uint>> codeCaves)
+		{
+			string code = "";
+			urlAddresses.Sort();
+
+			if (urlAddresses.Count > 0)
+			{
+				List<uint> codeParts = new List<uint>();
+				// Hook check
+				codeParts.Add(0x50000000 | ((arm9Hook + 4) & 0xFFFFFFF));
+				codeParts.Add(0xEE070F90);
+
+				// Compile ASM code
+				List<ushort> caveParts = new List<ushort>();
+				//	fspace:
+				//	.thumb
+				//		add		r2,=addrPtr			// get array start
+				caveParts.Add(0xA20C);
+				//	main_loop:
+				//		ldmia	[r2]!,r1			// get next string ptr, increment array ptr
+				caveParts.Add(0xCA02);
+				//		mov		r3,3h				// start at most significant byte
+				caveParts.Add(0x2303);
+				//	check_loop:
+				//		lsl		r4,r4,8h			// this is done 4 times, so no need to set to 0
+				caveParts.Add(0x0224);
+				//		ldrb	r5,[r1,r3]			// load the byte
+				caveParts.Add(0x5CCD);
+				//		add		r4,r4,r5			// add the byte
+				caveParts.Add(0x1964);
+				//		sub		r3,1h				// go to previous byte
+				caveParts.Add(0x3B01);
+				//		bpl		check_loop			// if this wasn't the first byte, loop
+				caveParts.Add(0xD5FA);
+				//		ldr		r3,=2F2F3A73h		// "s://"
+				caveParts.Add(0x4B07);
+				//		cmp		r3,r4				// should be "s://"
+				caveParts.Add(0x42A3);
+				//		bne		next				// if not "s://", calc next string ptr
+				caveParts.Add(0xD104);
+				//	patch_loop:
+				//		ldrb	r4,[r1,1h]			// get next char
+				caveParts.Add(0x784C);
+				//		strb	r4,[r1]				// write to current
+				caveParts.Add(0x700C);
+				//		add		r1,1h				// increment string ptr
+				caveParts.Add(0x3101);
+				//		tst		r4,r4				// check for zero byte
+				caveParts.Add(0x4224);
+				//		bne		patch_loop			// if not zero, loop
+				caveParts.Add(0xD1FA);
+				//	next:
+				//		add		r1,=addrPtr_end		// get array end
+				caveParts.Add((ushort)(0xA104 + urlAddresses.Count));
+				//		cmp		r1,r2				// check if at array end
+				caveParts.Add(0x428A);
+				//		blt		main_loop			// if not, check next string ptr
+				caveParts.Add(0xDBED);
+				//	end:
+				//		bx		r15					// switch to ARM
+				caveParts.Add(0x4778);
+				//	.arm							// r0 is still zero
+				//		mov		p15,0,c7,c0,4,r0	// wait for interrupt
+				caveParts.Add(0x0F90);
+				caveParts.Add(0xEE07);
+				//		pop		r1-r4,r15			// pop registers and return
+				caveParts.Add(0x803E);
+				caveParts.Add(0xE8BD);
+				//	.pool
+				caveParts.Add(0x3A73);
+				caveParts.Add(0x2F2F);
+
+				// Add offsets
+				foreach (uint urlAddress in urlAddresses) {
+					caveParts.Add((ushort)((urlAddress + 4) & 0xFFFF));
+					caveParts.Add((ushort)((urlAddress + 4) >> 16));
+				}
+
+				List<uint> codeCave = codeCaves[0];
+				insertCodeCave(codeParts, caveParts, codeCave);
+
+				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
+				//		push	r1-r5,r14			// push registers
+				codeParts.Add(0xE92D403E);
+				codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
+				//		blx		fspace				// branch to code cave
+				uint opcode = 0xFA000000;
+				opcode |= (uint)((codeCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
+				opcode |= (uint)(-(((arm9Hook - codeCave[0]) / 4) + 4) & 0xFFFFFF);
+				codeParts.Add(opcode);
+
+				codeParts.Add(0xD2000000);
+				codeParts.Add(0x00000000);
+
+				bool first = true;
+				foreach (uint part in codeParts) {
+					if (first) {
+						code += "\r\n";
+					} else {
+						code += " ";
+					}
+					code += part.ToString("X8");
+					first = !first;
+				}
+				if (!first) {
+					code += " 00000000";
+				}
+				code = code.Substring(2);
+			}
+
+			return code;
+		}
+
+		static string makeCodeSmall(uint arm9Hook, List<uint> urlAddresses, List<List<uint>> codeCaves)
 		{
 			string code = "";
 			urlAddresses.Sort();
@@ -470,17 +617,29 @@ namespace WfcReplay
 				// Compress offsets
 				List<ushort> dataParts = new List<ushort>();
 				for (int i = 0; i < urlAddresses.Count; i++) {
+					// 0x24243A73 = "s://"
+					// It just so happens that subtracting this from any NDS RAM address makes it negative...
+					// This fact is abused to compress the addresses to check and patch. The compression works as follows:
+					// - Starting offset
+					// - Next 16-bit value is read in a loop
+					// - If it's zero, we're done
+					// - If it's positive, it's added to the current address to get the next one
+					// - If it's negative, it's set as the new current address together with the next 16-bit value
+					// Need to add + 4 here to skip the "http"
 					uint ptr = urlAddresses[i] - 0x2F2F3A73 + 4;
 					ushort upper = (ushort)(ptr >> 16);
 					ushort lower = (ushort)(ptr & 0xFFFF);
 					if (i == 0) {
 						dataParts.Add(lower);
 						dataParts.Add(upper);
-					} else if (urlAddresses[i] - urlAddresses[i - 1] < 0x20000) {
-						dataParts.Add((ushort)((urlAddresses[i] - urlAddresses[i - 1]) >> 2));
 					} else {
-						dataParts.Add(upper);
-						dataParts.Add(lower);
+						uint diff = urlAddresses[i] - urlAddresses[i - 1];
+						if (diff < 0x20000 && (diff & 0x3) == 0) {
+							dataParts.Add((ushort)((urlAddresses[i] - urlAddresses[i - 1]) >> 2));
+						} else {
+							dataParts.Add(upper);
+							dataParts.Add(lower);
+						}
 					}
 				}
 				dataParts.Add(0x0000);
@@ -516,7 +675,7 @@ namespace WfcReplay
 				caveParts.Add(0x4224);
 				//		bne		patch_loop			// if not zero, loop
 				caveParts.Add(0xD1FA);
-				//	next:							// r0 is zero at this point
+				//	next:							// ldsh rd,[rs,nn] isn't possible, so we need r0 here; fortunately, it should be zero at this point
 				//		ldsh	r4,[r2,r0]			// get next value (signed)
 				//									// if positive, offset of next ptr
 				//									// if negative, upper bits of next ptr
@@ -540,13 +699,13 @@ namespace WfcReplay
 				//		b		next_add			// add offset to pointer
 				caveParts.Add(0xE7F9);
 				//	end:
-				//	bx		r15					// switch to ARM
+				//		bx		r15					// switch to ARM
 				caveParts.Add(0x4778);
 				//	.arm							// r0 is still zero
-				//	mov		p15,0,c7,c0,4,r0	// wait for interrupt
+				//		mov		p15,0,c7,c0,4,r0	// wait for interrupt
 				caveParts.Add(0x0F90);
 				caveParts.Add(0xEE07);
-				//	pop		r1-r4,r15			// pop registers and return
+				//		pop		r1-r4,r15			// pop registers and return
 				caveParts.Add(0x801E);
 				caveParts.Add(0xE8BD);
 				//	.pool
@@ -593,10 +752,10 @@ namespace WfcReplay
 				}
 
 				codeParts.Add((arm9Hook + 4) & 0xFFFFFFF);
-				//		push	r1-r4,r14					// push registers
+				//		push	r1-r4,r14			// push registers
 				codeParts.Add(0xE92D401E);
 				codeParts.Add((arm9Hook + 8) & 0xFFFFFFF);
-				//		blx		fspace						// branch to code cave
+				//		blx		fspace				// branch to code cave
 				uint opcode = 0xFA000000;
 				opcode |= (uint)((asmCave[0] & 2) != 0 ? 0x01000000 : 0x00000000);
 				opcode |= (uint)(-(((arm9Hook - asmCave[0]) / 4) + 4) & 0xFFFFFF);
