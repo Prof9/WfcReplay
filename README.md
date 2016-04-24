@@ -14,7 +14,14 @@ To use WfcReplay, pass it the file path of an NDS ROM. You can also drag-and-dro
 
 Compatibility
 -------------
-WfcReplay should work with all NDS games, though not every single one of them has been tested. If you find an incompatible game, please create an issue on the GitHub page at https://github.com/Prof9/wfcreplay.
+WfcReplay should work with most NDS games, though not every single one of them has been tested. See below for known incompatible games. If you find another incompatible game, please create an issue on the GitHub page at https://github.com/Prof9/wfcreplay.
+
+Known incompatible games
+------------------------
+The following games are known to be incompatible with WfcReplay. These will most likely never be supported and will require a game-specific code to be written for them.
+
+* **Animal Crossing: Wild World**: ARM9 binary gets copied to ITCM before AR has a chance to patch it.
+* **Contact**: Code works, but the game never idles so the URLs never get patched.
 
 Notes
 -----
